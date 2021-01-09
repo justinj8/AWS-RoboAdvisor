@@ -1,3 +1,5 @@
+import json
+
 ### Required Libraries ###
 from datetime import datetime
 from dateutil.relativedelta import relativedelta
@@ -15,7 +17,7 @@ def parse_int(n):
 
 def build_validation_result(is_valid, violated_slot, message_content):
     """
-    Define a result message structured as Lex response.
+    Defines an internal validation message structured as a python dictionary.
     """
     if message_content is None:
         return {"isValid": is_valid, "violatedSlot": violated_slot}
@@ -25,6 +27,7 @@ def build_validation_result(is_valid, violated_slot, message_content):
         "violatedSlot": violated_slot,
         "message": {"contentType": "PlainText", "content": message_content},
     }
+
 
 
 ### Dialog Actions Helper Functions ###
@@ -50,7 +53,7 @@ def elicit_slot(session_attributes, intent_name, slots, slot_to_elicit, message)
             "message": message,
         },
     }
-
+    
 
 def delegate(session_attributes, slots):
     """
@@ -79,6 +82,31 @@ def close(session_attributes, fulfillment_state, message):
 
     return response
 
+def validate_data(age, investment_amount, intent_request):
+    """
+    Validates the data provided by the user.
+    """
+
+    # Validate that the user is over 21 years old
+    if age is not None:
+        if parse_int(age) <= 0 or parse_int(age) >= 65:
+            return build_validation_result(
+                False,
+                "age",
+                "The age should be greater than zero and less than 65",
+            )
+        
+    # Validate that investment amount is greated than 5000
+    if investment_amount is not None:
+        if parse_int(investment_amount) < 5000:
+            return build_validation_result(
+                False,
+                "investmentAmount",
+                "The investmentAmount should be equal to or greater than 5000.",
+            )
+
+    # A True results is returned if age or amount are valid
+    return build_validation_result(True, None, None)
 
 ### Intents Handlers ###
 def recommend_portfolio(intent_request):
@@ -91,13 +119,40 @@ def recommend_portfolio(intent_request):
     investment_amount = get_slots(intent_request)["investmentAmount"]
     risk_level = get_slots(intent_request)["riskLevel"]
     source = intent_request["invocationSource"]
-
+    
+    data_valid = True
+    
+    print('I came to recommend_portfolio with ', intent_request)
+    
     if source == "DialogCodeHook":
         # Perform basic validation on the supplied input slots.
         # Use the elicitSlot dialog action to re-prompt
         # for the first violation detected.
 
         ### YOUR DATA VALIDATION CODE STARTS HERE ###
+        
+        # Gets all the slots
+        slots = get_slots(intent_request)
+
+        # Check if age is between 0 and 65 and investment amount is over 5000
+        validation_result = validate_data(age, investment_amount, intent_request)
+        
+        print("*** And the data is.... ", validation_result["isValid"])
+
+        # If the data provided by the user is not valid,
+        # the elicitSlot dialog action is used to re-prompt for the first violation detected.
+        if not validation_result["isValid"]:
+            print('not validated: ', slots[validation_result["violatedSlot"]])
+            slots[validation_result["violatedSlot"]] = None  # Cleans invalid slot
+
+            # Returns an elicitSlot dialog to request new data for the invalid slot
+            return elicit_slot(
+                intent_request["sessionAttributes"],
+                intent_request["currentIntent"]["name"],
+                slots,
+                validation_result["violatedSlot"],
+                validation_result["message"],
+            )
 
         ### YOUR DATA VALIDATION CODE ENDS HERE ###
 
@@ -109,6 +164,21 @@ def recommend_portfolio(intent_request):
     # Get the initial investment recommendation
 
     ### YOUR FINAL INVESTMENT RECOMMENDATION CODE STARTS HERE ###
+    # Validate that investment amount is greated than 5000
+    if risk_level == "None":
+        initial_recommendation = "100% bonds (AGG), 0% equities (SPY)"
+    elif risk_level == "Low":
+        initial_recommendation = "80% bonds (AGG), 20% equities (SPY)"
+    elif risk_level == "Very Low":
+        initial_recommendation = "60% bonds (AGG), 40% equities (SPY)"
+    elif risk_level == "Medium":
+        initial_recommendation = "40% bonds (AGG), 60% equities (SPY)"
+    elif risk_level == "High":
+        initial_recommendation = "20% bonds (AGG), 80% equities (SPY)"
+    elif risk_level == "Very High":
+        initial_recommendation = "0% bonds (AGG), 100% equities (SPY)"
+    else:
+        initial_recommendation="risk_level not recognized" 
 
     ### YOUR FINAL INVESTMENT RECOMMENDATION CODE ENDS HERE ###
 
@@ -148,5 +218,7 @@ def lambda_handler(event, context):
     Route the incoming request based on intent.
     The JSON body of the request is provided in the event slot.
     """
+    print('I am at the lambda_handler')
 
     return dispatch(event)
+
