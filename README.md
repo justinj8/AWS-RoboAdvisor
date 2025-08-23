@@ -68,6 +68,3 @@ print(lambda_handler(sample_event, None))
 PYTHON
 ```
 
-## Disclaimer
-
-This project is for educational purposes only and does not constitute financial advice.
